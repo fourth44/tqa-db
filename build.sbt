@@ -34,6 +34,7 @@ libraryDependencies ++= Seq(
   "com.google.code.findbugs" % "jsr305" % "3.0.2" % Optional, // This solved compiler error "... could not find MAYBE in enum"
   "org.postgresql" % "postgresql" % "42.2.8",
   "com.zaxxer" % "HikariCP" % "3.4.1",
+  "ch.qos.logback" % "logback-classic" % "1.2.3",
 
   "org.scalatest" %% "scalatest" % "3.0.8" % "test"
 )

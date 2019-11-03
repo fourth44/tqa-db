@@ -54,13 +54,13 @@ final class DefaultDtsRepo(val txManager: PlatformTransactionManager, val jdbcTe
 
     val txTemplate: TransactionTemplate = new TransactionTemplate(txManager)
     txTemplate.setIsolationLevel(TransactionDefinition.ISOLATION_SERIALIZABLE)
-    txTemplate.setTimeout(300) // scalastyle:off
+    txTemplate.setTimeout(600) // scalastyle:off
 
     txTemplate.executeWithoutResult { _: TransactionStatus =>
       val batch: Map[Int, TaxonomyDocument] = taxo.taxonomyDocs.zipWithIndex.map { case (d, i) => i -> d }.toMap
       val batchSize = batch.size
 
-      val psSetter: BatchPreparedStatementSetter = new BatchPreparedStatementSetter {
+      val psSetterInsertDoc: BatchPreparedStatementSetter = new BatchPreparedStatementSetter {
         override def setValues(ps: PreparedStatement, i: Int): Unit = {
           val taxoDoc = batch(i)
           ps.setString(1, taxoDoc.uri.toString)
@@ -72,9 +72,25 @@ final class DefaultDtsRepo(val txManager: PlatformTransactionManager, val jdbcTe
         override def getBatchSize: Int = batchSize
       }
 
-      jdbcTemplate.batchUpdate(insertDocSql, psSetter)
+      jdbcTemplate.batchUpdate(insertDocSql, psSetterInsertDoc)
 
-      // TODO Other tables
+      jdbcTemplate.update(insertEntrypointSql, entrypoint.name)
+
+      entrypoint.docUris.foreach { epDocUri =>
+        jdbcTemplate.update(insertEntrypointDocUrisSql, entrypoint.name, epDocUri.toString)
+      }
+
+      val psSetterInsertDtsUri: BatchPreparedStatementSetter = new BatchPreparedStatementSetter {
+        override def setValues(ps: PreparedStatement, i: Int): Unit = {
+          val taxoDoc = batch(i)
+          ps.setString(1, entrypoint.name)
+          ps.setString(2, taxoDoc.uri.toString)
+        }
+
+        override def getBatchSize: Int = batchSize
+      }
+
+      jdbcTemplate.batchUpdate(insertDtsDocUrisSql, psSetterInsertDtsUri)
     }
   }
 
@@ -91,4 +107,13 @@ object DefaultDtsRepo {
 
   val insertDocSql: String =
     "INSERT INTO taxo_documents (docuri, doc) VALUES (?, ?) ON CONFLICT (docuri) DO NOTHING"
+
+  val insertEntrypointSql: String =
+    "INSERT INTO entrypoints (name) VALUES (?)"
+
+  val insertEntrypointDocUrisSql: String =
+    "INSERT INTO entrypoint_docuris (entrypoint_name, docuri) VALUES (?, ?)"
+
+  val insertDtsDocUrisSql: String =
+    "INSERT INTO dts_docuris (entrypoint_name, docuri) VALUES (?, ?)"
 }

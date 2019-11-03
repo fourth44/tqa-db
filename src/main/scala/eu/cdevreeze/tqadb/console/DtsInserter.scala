@@ -34,6 +34,8 @@ import eu.cdevreeze.tqadb.repo.DtsRepo
 import eu.cdevreeze.tqadb.wiring.DefaultAppConf
 import eu.cdevreeze.tqadb.wiring.DefaultDataSourceProvider
 import net.sf.saxon.s9api.Processor
+import org.slf4j.Logger
+import org.slf4j.LoggerFactory
 import org.springframework.jdbc.core.JdbcTemplate
 import org.xml.sax.InputSource
 
@@ -46,7 +48,10 @@ import org.xml.sax.InputSource
  */
 object DtsInserter {
 
+  private val logger: Logger = LoggerFactory.getLogger("DtsInserter")
+
   def insertDts(taxoRootDir: File, entrypointDocUris: Set[URI]): Unit = {
+    logger.info(s"Loading taxonomy")
     val dts: BasicTaxonomy = getTaxonomy(taxoRootDir, entrypointDocUris)
 
     val entrypointName = entrypointDocUris.head.toString
@@ -55,9 +60,11 @@ object DtsInserter {
     val ds = DefaultDataSourceProvider.getInstanceFromSysProps().dataSource
     val appConf = new DefaultAppConf(ds)
 
+    logger.info(s"Storing taxonomy")
     val dtsRepo: DtsRepo = new DefaultDtsRepo(appConf.transactionManager, new JdbcTemplate(ds))
 
     dtsRepo.insertTaxo(entrypoint, dts)
+    logger.info(s"Stored taxonomy")
   }
 
   private def getTaxonomy(taxoRootDir: File, entrypointDocUris: Set[URI]): BasicTaxonomy = {
