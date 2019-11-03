@@ -29,11 +29,12 @@ final class DefaultDataSourceProvider(
   val host: String,
   val port: Int,
   val user: String,
-  val password: String) extends DataSourceProvider {
+  val password: String,
+  val database: String) extends DataSourceProvider {
 
   val simpleDataSource: DataSource = {
     val ds = new PGSimpleDataSource()
-    ds.setUrl(s"jdbc:postgresql://${host}:${port}/taxo") // Assuming database taxo
+    ds.setUrl(s"jdbc:postgresql://${host}:${port}/$database")
     ds.setUser(user)
     ds.setPassword(password)
     ds
@@ -58,7 +59,8 @@ object DefaultDataSourceProvider {
       System.getProperty("db.host", "localhost"),
       System.getProperty("db.port", "5432").toInt,
       System.getProperty("db.user").ensuring(Option(_).nonEmpty),
-      System.getProperty("db.password").ensuring(Option(_).nonEmpty)
+      System.getProperty("db.password").ensuring(Option(_).nonEmpty),
+      System.getProperty("db.database", "taxo")
     )
   }
 }

@@ -23,4 +23,4 @@ import java.net.URI
  *
  * @author Chris de Vreeze
  */
-final case class Entrypoint(val name: String, val docUris: Set[URI])
+final case class Entrypoint(name: String, docUris: Set[URI])

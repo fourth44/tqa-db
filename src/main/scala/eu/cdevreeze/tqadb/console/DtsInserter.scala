@@ -18,10 +18,7 @@ package eu.cdevreeze.tqadb.console
 
 import java.io.File
 import java.net.URI
-import java.sql.PreparedStatement
-import java.sql.SQLXML
 
-import eu.cdevreeze.tqa.base.dom.TaxonomyDocument
 import eu.cdevreeze.tqa.base.relationship.DefaultRelationshipFactory
 import eu.cdevreeze.tqa.base.relationship.RelationshipFactory
 import eu.cdevreeze.tqa.base.taxonomy.BasicTaxonomy
@@ -32,21 +29,12 @@ import eu.cdevreeze.tqa.docbuilder.DocumentBuilder
 import eu.cdevreeze.tqa.docbuilder.jvm.UriResolvers
 import eu.cdevreeze.tqa.docbuilder.saxon.SaxonDocumentBuilder
 import eu.cdevreeze.tqadb.data.Entrypoint
+import eu.cdevreeze.tqadb.repo.DefaultDtsRepo
+import eu.cdevreeze.tqadb.repo.DtsRepo
 import eu.cdevreeze.tqadb.wiring.DefaultAppConf
 import eu.cdevreeze.tqadb.wiring.DefaultDataSourceProvider
-import eu.cdevreeze.yaidom.saxon.SaxonDocument
-import javax.sql.DataSource
-import javax.xml.transform.sax.SAXResult
-import net.sf.saxon.query.QueryResult
 import net.sf.saxon.s9api.Processor
-import net.sf.saxon.serialize.SerializationProperties
-import org.springframework.jdbc.core.BatchPreparedStatementSetter
-// import org.jooq.util.postgres.PostgresDSL._
 import org.springframework.jdbc.core.JdbcTemplate
-import org.springframework.transaction.PlatformTransactionManager
-import org.springframework.transaction.TransactionDefinition
-import org.springframework.transaction.TransactionStatus
-import org.springframework.transaction.support.TransactionTemplate
 import org.xml.sax.InputSource
 
 /**
@@ -67,7 +55,9 @@ object DtsInserter {
     val ds = DefaultDataSourceProvider.getInstanceFromSysProps().dataSource
     val appConf = new DefaultAppConf(ds)
 
-    insertTaxo(entrypoint, dts)(appConf.transactionManager, ds)
+    val dtsRepo: DtsRepo = new DefaultDtsRepo(appConf.transactionManager, new JdbcTemplate(ds))
+
+    dtsRepo.insertTaxo(entrypoint, dts)
   }
 
   private def getTaxonomy(taxoRootDir: File, entrypointDocUris: Set[URI]): BasicTaxonomy = {
@@ -84,42 +74,6 @@ object DtsInserter {
       .withDocumentCollector(docCollector).withRelationshipFactory(relationshipFactory).build(entrypointDocUris)
   }
 
-  private def insertTaxo(entrypoint: Entrypoint, taxo: BasicTaxonomy)(txManager: PlatformTransactionManager, ds: DataSource): Unit = {
-    val txTemplate: TransactionTemplate = new TransactionTemplate(txManager)
-    txTemplate.setIsolationLevel(TransactionDefinition.ISOLATION_SERIALIZABLE)
-    txTemplate.setTimeout(300) // scalastyle:off
-
-    val jdbcTemplate = new JdbcTemplate(ds)
-
-    txTemplate.executeWithoutResult { _: TransactionStatus =>
-      val batch: Map[Int, TaxonomyDocument] = taxo.taxonomyDocs.zipWithIndex.map { case (d, i) => i -> d }.toMap
-      val batchSize = batch.size
-
-      val psSetter: BatchPreparedStatementSetter = new BatchPreparedStatementSetter {
-        override def setValues(ps: PreparedStatement, i: Int): Unit = {
-          val taxoDoc = batch(i)
-          ps.setString(1, taxoDoc.uri.toString)
-          val sqlXml = convertDocToSQLXML(taxoDoc, ps)
-          ps.setSQLXML(2, sqlXml)
-          sqlXml.free()
-        }
-        override def getBatchSize: Int = batchSize
-      }
-
-      jdbcTemplate.batchUpdate(insertDocSql, psSetter)
-
-      // TODO Other tables
-    }
-  }
-
-  private def convertDocToSQLXML(doc: TaxonomyDocument, ps: PreparedStatement): SQLXML = {
-    val sqlXml: SQLXML = ps.getConnection().createSQLXML()
-    val saxResult = sqlXml.setResult(classOf[SAXResult])
-    val saxonNodeInfo = doc.backingDocument.asInstanceOf[SaxonDocument].wrappedTreeInfo.getRootNode
-    QueryResult.serialize(saxonNodeInfo, saxResult, new SerializationProperties())
-    sqlXml
-  }
-
   def main(args: Array[String]): Unit = {
     require(args.sizeIs >= 2, s"Usage: DtsInserter <root dir> <entrypoint doc URI> ...")
 
@@ -127,7 +81,4 @@ object DtsInserter {
 
     insertDts(rootDir, args.drop(1).map(u => URI.create(u)).toSet)
   }
-
-  private val insertDocSql: String =
-    "INSERT INTO taxo_documents (docuri, doc) VALUES (?, ?) ON CONFLICT (docuri) DO NOTHING"
 }

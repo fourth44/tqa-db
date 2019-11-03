@@ -14,13 +14,20 @@
  * limitations under the License.
  */
 
-package eu.cdevreeze.tqadb.data
+package eu.cdevreeze.tqadb.repo
 
-import java.net.URI
+import eu.cdevreeze.tqa.base.taxonomy.BasicTaxonomy
+import eu.cdevreeze.tqadb.data.Entrypoint
 
 /**
- * DTS as set of document URIs, representing corresponding database data.
+ * Abstract DTS repository API, touching all tables of the database.
  *
  * @author Chris de Vreeze
  */
-final case class DtsUriSet(entrypointName: String, docUris: Set[URI])
+trait DtsRepo {
+
+  /**
+   * Inserts a DTS into the database. The given entrypoint must belong to the given taxonomy.
+   */
+  def insertTaxo(entrypoint: Entrypoint, taxo: BasicTaxonomy): Unit
+}
