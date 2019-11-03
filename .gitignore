@@ -1,0 +1,21 @@
+.cache
+.cache-main
+.cache-tests
+.classpath
+.project
+.worksheet/
+.settings/
+target/
+out/
+temp/
+.history
+scalastyle-config.xml
+node_modules/
+.idea/
+
+# /project/
+/project/boot
+/project/project/
+/project/target/
+/project/build/target
+
