@@ -19,7 +19,6 @@ package eu.cdevreeze.tqadb.wiring
 import com.typesafe.config.Config
 import com.typesafe.config.ConfigFactory
 import com.zaxxer.hikari.HikariDataSource
-import javax.sql.DataSource
 import org.postgresql.ds.PGSimpleDataSource
 
 /**
@@ -34,7 +33,7 @@ final class DefaultDataSourceProvider(
   val password: String,
   val database: String) extends DataSourceProvider {
 
-  val simpleDataSource: DataSource = {
+  val simpleDataSource: PGSimpleDataSource = {
     val ds = new PGSimpleDataSource()
     ds.setUrl(s"jdbc:postgresql://${host}:${port}/$database")
     ds.setUser(user)
@@ -42,7 +41,7 @@ final class DefaultDataSourceProvider(
     ds
   }
 
-  val dataSource: DataSource = {
+  val dataSource: HikariDataSource = {
     // Uses connection pool, so closing a connection means giving it back to the connection pool
 
     // See https://github.com/brettwooldridge/HikariCP#configuration-knobs-baby

@@ -59,7 +59,8 @@ object MultipleDtsInserter {
 
     logger.info(s"Found ${entrypointDocUris.size} entrypoints")
 
-    val ds = DefaultDataSourceProvider.getInstance().simpleDataSource
+    val ds = DefaultDataSourceProvider.getInstance().dataSource
+    ds.setMaximumPoolSize(5) // scalastyle:off
     val appConf = new DefaultAppConf(ds)
 
     val dtsRepo: DtsRepo = new DefaultDtsRepo(appConf.transactionManager, new JdbcTemplate(ds))
