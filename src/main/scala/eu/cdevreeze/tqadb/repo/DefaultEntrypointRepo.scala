@@ -22,6 +22,7 @@ import java.sql.ResultSet
 import scala.jdk.CollectionConverters._
 
 import eu.cdevreeze.tqadb.data.Entrypoint
+import eu.cdevreeze.tqadb.repo.DefaultEntrypointRepo.NonTransactionalEntrypointRepo
 import org.jooq.impl.DSL.field
 import org.jooq.impl.DSL.select
 import org.jooq.impl.DSL.table
@@ -40,9 +41,7 @@ import org.springframework.transaction.support.TransactionTemplate
  */
 final class DefaultEntrypointRepo(val txManager: PlatformTransactionManager, val jdbcTemplate: JdbcOperations) extends EntrypointRepo {
 
-  private def namedParameterJdbcTemplate: NamedParameterJdbcOperations = new NamedParameterJdbcTemplate(jdbcTemplate)
-
-  import DefaultEntrypointRepo._
+  private val delegateRepo: EntrypointRepo = new NonTransactionalEntrypointRepo(jdbcTemplate)
 
   // TODO Consider using the RetryTemplate for read-write transactions with isolation level serializable
 
@@ -51,17 +50,22 @@ final class DefaultEntrypointRepo(val txManager: PlatformTransactionManager, val
     txTemplate.setReadOnly(true)
 
     txTemplate.execute { _: TransactionStatus =>
-      findAllEntrypointsWithoutTransaction()
+      delegateRepo.findAllEntrypoints()
     }
-  }
-
-  def findAllEntrypointsWithoutTransaction(): Seq[Entrypoint] = {
-    namedParameterJdbcTemplate.query(findAllEntrypointDocUrisSql, entrypointDocUriRowMapper)
-      .asScala.groupBy(_.name).toSeq.map { case (name, rows) => Entrypoint(name, rows.map(_.docUri).toSet) }
   }
 }
 
 object DefaultEntrypointRepo {
+
+  final class NonTransactionalEntrypointRepo(val jdbcTemplate: JdbcOperations) extends EntrypointRepo {
+
+    private def namedParameterJdbcTemplate: NamedParameterJdbcOperations = new NamedParameterJdbcTemplate(jdbcTemplate)
+
+    def findAllEntrypoints(): Seq[Entrypoint] = {
+      namedParameterJdbcTemplate.query(findAllEntrypointDocUrisSql, entrypointDocUriRowMapper)
+        .asScala.groupBy(_.name).toSeq.map { case (name, rows) => Entrypoint(name, rows.map(_.docUri).toSet) }
+    }
+  }
 
   private case class EntrypointDocUri(name: String, docUri: URI)
 

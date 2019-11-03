@@ -32,6 +32,7 @@ import eu.cdevreeze.tqa.base.taxonomybuilder.TaxonomyBuilder
 import eu.cdevreeze.tqa.base.taxonomybuilder.TrivialDocumentCollector
 import eu.cdevreeze.tqa.docbuilder.DocumentBuilder
 import eu.cdevreeze.tqadb.data.Entrypoint
+import eu.cdevreeze.tqadb.repo.DefaultDtsRepo.NonTransactionalDtsRepo
 import eu.cdevreeze.yaidom.saxon.SaxonDocument
 import javax.xml.transform.sax.SAXResult
 import javax.xml.transform.sax.SAXSource
@@ -58,9 +59,7 @@ import org.springframework.transaction.support.TransactionTemplate
  */
 final class DefaultDtsRepo(val txManager: PlatformTransactionManager, val jdbcTemplate: JdbcOperations) extends DtsRepo {
 
-  private def namedParameterJdbcTemplate: NamedParameterJdbcOperations = new NamedParameterJdbcTemplate(jdbcTemplate)
-
-  import DefaultDtsRepo._
+  private val delegateRepo: DtsRepo = new NonTransactionalDtsRepo(jdbcTemplate)
 
   // TODO Consider using the RetryTemplate for read-write transactions with isolation level serializable
 
@@ -74,7 +73,7 @@ final class DefaultDtsRepo(val txManager: PlatformTransactionManager, val jdbcTe
     txTemplate.setTimeout(600) // scalastyle:off
 
     txTemplate.executeWithoutResult { _: TransactionStatus =>
-      insertTaxoWithoutTransaction(entrypoint, taxo)
+      delegateRepo.insertTaxo(entrypoint, taxo)
     }
   }
 
@@ -88,8 +87,7 @@ final class DefaultDtsRepo(val txManager: PlatformTransactionManager, val jdbcTe
     txTemplate.setTimeout(600) // scalastyle:off
 
     txTemplate.executeWithoutResult { _: TransactionStatus =>
-      deleteTaxoWithoutTransaction(entrypoint)
-      insertTaxoWithoutTransaction(entrypoint, taxo)
+      delegateRepo.insertOrUpdateTaxo(entrypoint, taxo)
     }
   }
 
@@ -98,7 +96,7 @@ final class DefaultDtsRepo(val txManager: PlatformTransactionManager, val jdbcTe
     txTemplate.setIsolationLevel(TransactionDefinition.ISOLATION_SERIALIZABLE)
 
     txTemplate.executeWithoutResult { _: TransactionStatus =>
-      deleteTaxoWithoutTransaction(entrypoint)
+      delegateRepo.deleteTaxo(entrypoint)
     }
   }
 
@@ -107,105 +105,119 @@ final class DefaultDtsRepo(val txManager: PlatformTransactionManager, val jdbcTe
     txTemplate.setReadOnly(true)
 
     txTemplate.execute { _: TransactionStatus =>
-      getTaxonomyWithoutTransaction(entrypointName)
+      delegateRepo.getTaxonomy(entrypointName)
     }
-  }
-
-  def insertTaxoWithoutTransaction(entrypoint: Entrypoint, taxo: BasicTaxonomy): Unit = {
-    require(
-      entrypoint.docUris.subsetOf(taxo.taxonomyBase.taxonomyDocUriMap.keySet),
-      s"Not an entrypoint for the given taxonomy: $entrypoint")
-
-    val batch: Map[Int, TaxonomyDocument] = taxo.taxonomyDocs.zipWithIndex.map { case (d, i) => i -> d }.toMap
-    val batchSize = batch.size
-
-    val psSetterInsertDoc: BatchPreparedStatementSetter = new BatchPreparedStatementSetter {
-      override def setValues(ps: PreparedStatement, i: Int): Unit = {
-        val taxoDoc = batch(i)
-        ps.setString(1, taxoDoc.uri.toString)
-        val sqlXml = convertDocToSQLXML(taxoDoc, ps)
-        ps.setSQLXML(2, sqlXml)
-        sqlXml.free()
-      }
-
-      override def getBatchSize: Int = batchSize
-    }
-
-    jdbcTemplate.batchUpdate(insertDocSql, psSetterInsertDoc)
-
-    jdbcTemplate.update(insertEntrypointSql, entrypoint.name)
-
-    entrypoint.docUris.foreach { epDocUri =>
-      jdbcTemplate.update(insertEntrypointDocUrisSql, entrypoint.name, epDocUri.toString)
-    }
-
-    val psSetterInsertDtsUri: BatchPreparedStatementSetter = new BatchPreparedStatementSetter {
-      override def setValues(ps: PreparedStatement, i: Int): Unit = {
-        val taxoDoc = batch(i)
-        ps.setString(1, entrypoint.name)
-        ps.setString(2, taxoDoc.uri.toString)
-      }
-
-      override def getBatchSize: Int = batchSize
-    }
-
-    jdbcTemplate.batchUpdate(insertDtsDocUrisSql, psSetterInsertDtsUri)
-  }
-
-  def deleteTaxoWithoutTransaction(entrypoint: Entrypoint): Unit = {
-    jdbcTemplate.update(deleteDtsDocUrisSql, entrypoint.name)
-
-    jdbcTemplate.update(deleteEntrypointDocUrisSql, entrypoint.name)
-
-    jdbcTemplate.update(deleteEntrypointSql, entrypoint.name)
-
-    jdbcTemplate.update(deleteDocsForEntrypointSql)
-  }
-
-  def getTaxonomyWithoutTransaction(entrypointName: String): BasicTaxonomy = {
-    val processor = new Processor(false)
-    val taxonomyDocRowMapper = getTaxonomyDocRowMapper(processor)
-
-    val docs: Seq[TaxonomyDocument] =
-      namedParameterJdbcTemplate.query(getTaxonomyDocSql, Map("name" -> entrypointName).asJava, taxonomyDocRowMapper).asScala.toSeq
-
-    getTaxonomy(docs, processor)
-  }
-
-  private def convertDocToSQLXML(doc: TaxonomyDocument, ps: PreparedStatement): SQLXML = {
-    val sqlXml: SQLXML = ps.getConnection().createSQLXML()
-    val saxResult = sqlXml.setResult(classOf[SAXResult])
-    saxResult.setSystemId(doc.uri.toString) // Trying to retain the document URI, but we cannot count on it.
-
-    val saxonNodeInfo = doc.backingDocument.asInstanceOf[SaxonDocument].wrappedTreeInfo.getRootNode
-    saxonNodeInfo.setSystemId(doc.uri.toString)
-
-    QueryResult.serialize(saxonNodeInfo, saxResult, new SerializationProperties())
-    sqlXml
-  }
-
-  private def getTaxonomy(taxonomyDocs: Seq[TaxonomyDocument], processor: Processor): BasicTaxonomy = {
-    val docsByUri: Map[URI, TaxonomyDocument] = taxonomyDocs.groupBy(_.uri).view.mapValues(_.head).toMap
-    val docUris: Set[URI] = docsByUri.keySet
-
-    val docBuilder: DocumentBuilder = new DocumentBuilder {
-      override type BackingDoc = SaxonDocument
-
-      override def build(uri: URI): SaxonDocument = {
-        docsByUri.getOrElse(uri, sys.error(s"Missing document $uri")).backingDocument.asInstanceOf[SaxonDocument]
-          .ensuring(_.uriOption.nonEmpty)
-      }
-    }
-
-    val docCollector: DocumentCollector = TrivialDocumentCollector
-    val relationshipFactory: RelationshipFactory = DefaultRelationshipFactory.StrictInstance
-
-    TaxonomyBuilder.withDocumentBuilder(docBuilder)
-      .withDocumentCollector(docCollector).withRelationshipFactory(relationshipFactory).build(docUris)
   }
 }
 
 object DefaultDtsRepo {
+
+  final class NonTransactionalDtsRepo(val jdbcTemplate: JdbcOperations) extends DtsRepo {
+
+    private def namedParameterJdbcTemplate: NamedParameterJdbcOperations = new NamedParameterJdbcTemplate(jdbcTemplate)
+
+    def insertTaxo(entrypoint: Entrypoint, taxo: BasicTaxonomy): Unit = {
+      require(
+        entrypoint.docUris.subsetOf(taxo.taxonomyBase.taxonomyDocUriMap.keySet),
+        s"Not an entrypoint for the given taxonomy: $entrypoint")
+
+      val batch: Map[Int, TaxonomyDocument] = taxo.taxonomyDocs.zipWithIndex.map { case (d, i) => i -> d }.toMap
+      val batchSize = batch.size
+
+      val psSetterInsertDoc: BatchPreparedStatementSetter = new BatchPreparedStatementSetter {
+        override def setValues(ps: PreparedStatement, i: Int): Unit = {
+          val taxoDoc = batch(i)
+          ps.setString(1, taxoDoc.uri.toString)
+          val sqlXml = convertDocToSQLXML(taxoDoc, ps)
+          ps.setSQLXML(2, sqlXml)
+          sqlXml.free()
+        }
+
+        override def getBatchSize: Int = batchSize
+      }
+
+      jdbcTemplate.batchUpdate(insertDocSql, psSetterInsertDoc)
+
+      jdbcTemplate.update(insertEntrypointSql, entrypoint.name)
+
+      entrypoint.docUris.foreach { epDocUri =>
+        jdbcTemplate.update(insertEntrypointDocUrisSql, entrypoint.name, epDocUri.toString)
+      }
+
+      val psSetterInsertDtsUri: BatchPreparedStatementSetter = new BatchPreparedStatementSetter {
+        override def setValues(ps: PreparedStatement, i: Int): Unit = {
+          val taxoDoc = batch(i)
+          ps.setString(1, entrypoint.name)
+          ps.setString(2, taxoDoc.uri.toString)
+        }
+
+        override def getBatchSize: Int = batchSize
+      }
+
+      jdbcTemplate.batchUpdate(insertDtsDocUrisSql, psSetterInsertDtsUri)
+    }
+
+    def insertOrUpdateTaxo(entrypoint: Entrypoint, taxo: BasicTaxonomy): Unit = {
+      require(
+        entrypoint.docUris.subsetOf(taxo.taxonomyBase.taxonomyDocUriMap.keySet),
+        s"Not an entrypoint for the given taxonomy: $entrypoint")
+
+      deleteTaxo(entrypoint)
+      insertTaxo(entrypoint, taxo)
+    }
+
+    def deleteTaxo(entrypoint: Entrypoint): Unit = {
+      jdbcTemplate.update(deleteDtsDocUrisSql, entrypoint.name)
+
+      jdbcTemplate.update(deleteEntrypointDocUrisSql, entrypoint.name)
+
+      jdbcTemplate.update(deleteEntrypointSql, entrypoint.name)
+
+      jdbcTemplate.update(deleteDocsForEntrypointSql)
+    }
+
+    def getTaxonomy(entrypointName: String): BasicTaxonomy = {
+      val processor = new Processor(false)
+      val taxonomyDocRowMapper = getTaxonomyDocRowMapper(processor)
+
+      val docs: Seq[TaxonomyDocument] =
+        namedParameterJdbcTemplate.query(getTaxonomyDocSql, Map("name" -> entrypointName).asJava, taxonomyDocRowMapper).asScala.toSeq
+
+      getTaxonomy(docs, processor)
+    }
+
+    private def convertDocToSQLXML(doc: TaxonomyDocument, ps: PreparedStatement): SQLXML = {
+      val sqlXml: SQLXML = ps.getConnection().createSQLXML()
+      val saxResult = sqlXml.setResult(classOf[SAXResult])
+      saxResult.setSystemId(doc.uri.toString) // Trying to retain the document URI, but we cannot count on it.
+
+      val saxonNodeInfo = doc.backingDocument.asInstanceOf[SaxonDocument].wrappedTreeInfo.getRootNode
+      saxonNodeInfo.setSystemId(doc.uri.toString)
+
+      QueryResult.serialize(saxonNodeInfo, saxResult, new SerializationProperties())
+      sqlXml
+    }
+
+    private def getTaxonomy(taxonomyDocs: Seq[TaxonomyDocument], processor: Processor): BasicTaxonomy = {
+      val docsByUri: Map[URI, TaxonomyDocument] = taxonomyDocs.groupBy(_.uri).view.mapValues(_.head).toMap
+      val docUris: Set[URI] = docsByUri.keySet
+
+      val docBuilder: DocumentBuilder = new DocumentBuilder {
+        override type BackingDoc = SaxonDocument
+
+        override def build(uri: URI): SaxonDocument = {
+          docsByUri.getOrElse(uri, sys.error(s"Missing document $uri")).backingDocument.asInstanceOf[SaxonDocument]
+            .ensuring(_.uriOption.nonEmpty)
+        }
+      }
+
+      val docCollector: DocumentCollector = TrivialDocumentCollector
+      val relationshipFactory: RelationshipFactory = DefaultRelationshipFactory.StrictInstance
+
+      TaxonomyBuilder.withDocumentBuilder(docBuilder)
+        .withDocumentCollector(docCollector).withRelationshipFactory(relationshipFactory).build(docUris)
+    }
+  }
 
   val insertDocSql: String =
     "INSERT INTO taxo_documents (docuri, doc) VALUES (?, ?) ON CONFLICT (docuri) DO NOTHING"
