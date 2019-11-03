@@ -103,6 +103,7 @@ final class DefaultDtsRepo(val txManager: PlatformTransactionManager, val jdbcTe
   def getTaxonomy(entrypointName: String): BasicTaxonomy = {
     val txTemplate = new TransactionTemplate(txManager)
     txTemplate.setReadOnly(true)
+    txTemplate.setTimeout(300) // scalastyle:off
 
     txTemplate.execute { _: TransactionStatus =>
       delegateRepo.getTaxonomy(entrypointName)
