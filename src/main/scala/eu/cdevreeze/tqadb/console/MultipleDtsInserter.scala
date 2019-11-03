@@ -54,7 +54,7 @@ object MultipleDtsInserter {
 
   private val logger: Logger = LoggerFactory.getLogger("MultipleDtsInserter")
 
-  def insertDtses(taxoRootDir: File, httpsHosts: Set[String], entrypointRegexes: Set[Pattern]): Unit = {
+  def insertOrUpdateDtses(taxoRootDir: File, httpsHosts: Set[String], entrypointRegexes: Set[Pattern]): Unit = {
     val entrypointDocUris: Set[URI] = findAllEntrypointUris(taxoRootDir, httpsHosts, entrypointRegexes)
 
     logger.info(s"Found ${entrypointDocUris.size} entrypoints")
@@ -68,7 +68,7 @@ object MultipleDtsInserter {
       logger.info(s"Processing taxonomy. Entrypoint: $entrypointDocUri")
 
       Try {
-        insertDts(taxoRootDir, entrypointDocUri, dtsRepo)
+        insertOrUpdateDts(taxoRootDir, entrypointDocUri, dtsRepo)
       }.recover { case t =>
         logger.warn(s"Could not process entrypoint $entrypointDocUri. Exception: $t")
       }
@@ -76,7 +76,7 @@ object MultipleDtsInserter {
     logger.info(s"Ready processing ${entrypointDocUris.size} entrypoints")
   }
 
-  private def insertDts(taxoRootDir: File, entrypointDocUri: URI, dtsRepo: DtsRepo): Unit = {
+  private def insertOrUpdateDts(taxoRootDir: File, entrypointDocUri: URI, dtsRepo: DtsRepo): Unit = {
     logger.info(s"Loading taxonomy. Entrypoint: $entrypointDocUri")
     val dts: BasicTaxonomy = getTaxonomy(taxoRootDir, entrypointDocUri)
 
@@ -85,7 +85,7 @@ object MultipleDtsInserter {
 
     logger.info(s"Storing taxonomy. Entrypoint: $entrypointDocUri")
 
-    dtsRepo.insertTaxo(entrypoint, dts)
+    dtsRepo.insertOrUpdateTaxo(entrypoint, dts)
     logger.info(s"Stored taxonomy. Entrypoint: $entrypointDocUri")
   }
 
@@ -150,6 +150,6 @@ object MultipleDtsInserter {
 
     val httpsHosts: Set[String] = System.getProperty("httpsHosts", "").pipe(_.split(',').map(_.trim).filter(_.nonEmpty).toSet)
 
-    insertDtses(rootDir, httpsHosts, args.drop(1).map(u => Pattern.compile(u)).toSet)
+    insertOrUpdateDtses(rootDir, httpsHosts, args.drop(1).map(u => Pattern.compile(u)).toSet)
   }
 }

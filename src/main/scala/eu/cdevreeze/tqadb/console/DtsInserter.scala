@@ -50,7 +50,7 @@ object DtsInserter {
 
   private val logger: Logger = LoggerFactory.getLogger("DtsInserter")
 
-  def insertDts(taxoRootDir: File, entrypointDocUris: Set[URI]): Unit = {
+  def insertOrUpdateDts(taxoRootDir: File, entrypointDocUris: Set[URI]): Unit = {
     logger.info(s"Loading taxonomy")
     val dts: BasicTaxonomy = getTaxonomy(taxoRootDir, entrypointDocUris)
 
@@ -63,7 +63,7 @@ object DtsInserter {
     logger.info(s"Storing taxonomy")
     val dtsRepo: DtsRepo = new DefaultDtsRepo(appConf.transactionManager, new JdbcTemplate(ds))
 
-    dtsRepo.insertTaxo(entrypoint, dts)
+    dtsRepo.insertOrUpdateTaxo(entrypoint, dts)
     logger.info(s"Stored taxonomy")
   }
 
@@ -86,6 +86,6 @@ object DtsInserter {
 
     val rootDir = new File(args(0)).ensuring(_.isDirectory)
 
-    insertDts(rootDir, args.drop(1).map(u => URI.create(u)).toSet)
+    insertOrUpdateDts(rootDir, args.drop(1).map(u => URI.create(u)).toSet)
   }
 }

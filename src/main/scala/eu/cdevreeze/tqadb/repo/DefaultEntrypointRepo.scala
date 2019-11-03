@@ -51,9 +51,13 @@ final class DefaultEntrypointRepo(val txManager: PlatformTransactionManager, val
     txTemplate.setReadOnly(true)
 
     txTemplate.execute { _: TransactionStatus =>
-      namedParameterJdbcTemplate.query(findAllEntrypointDocUrisSql, entrypointDocUriRowMapper)
-        .asScala.groupBy(_.name).toSeq.map { case (name, rows) => Entrypoint(name, rows.map(_.docUri).toSet) }
+      findAllEntrypointsWithoutTransaction()
     }
+  }
+
+  def findAllEntrypointsWithoutTransaction(): Seq[Entrypoint] = {
+    namedParameterJdbcTemplate.query(findAllEntrypointDocUrisSql, entrypointDocUriRowMapper)
+      .asScala.groupBy(_.name).toSeq.map { case (name, rows) => Entrypoint(name, rows.map(_.docUri).toSet) }
   }
 }
 

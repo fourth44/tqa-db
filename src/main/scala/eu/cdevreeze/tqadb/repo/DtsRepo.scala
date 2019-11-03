@@ -30,4 +30,21 @@ trait DtsRepo {
    * Inserts a DTS into the database. The given entrypoint must belong to the given taxonomy.
    */
   def insertTaxo(entrypoint: Entrypoint, taxo: BasicTaxonomy): Unit
+
+  /**
+   * Inserts a DTS into the database, or updates it if it is already in the database. The given entrypoint must belong to the given taxonomy.
+   * Updating here means, within the same transaction: first delete, then insert.
+   */
+  def insertOrUpdateTaxo(entrypoint: Entrypoint, taxo: BasicTaxonomy): Unit
+
+  /**
+   * Removes a DTS from the database. If the entrypoint does not occur in the database, this is a no-op.
+   */
+  def deleteTaxo(entrypoint: Entrypoint): Unit
+
+  /**
+   * Loads the taxonomy with the given entrypoint from the database. The taxonomy is returned as a TQA taxonomy.
+   * An exception is thrown if the entrypoint does not occur in the database.
+   */
+  def getTaxonomy(entrypointName: String): BasicTaxonomy
 }
