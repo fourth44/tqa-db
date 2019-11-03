@@ -16,6 +16,8 @@
 
 package eu.cdevreeze.tqadb.wiring
 
+import com.typesafe.config.Config
+import com.typesafe.config.ConfigFactory
 import com.zaxxer.hikari.HikariDataSource
 import javax.sql.DataSource
 import org.postgresql.ds.PGSimpleDataSource
@@ -54,13 +56,17 @@ final class DefaultDataSourceProvider(
 
 object DefaultDataSourceProvider {
 
-  def getInstanceFromSysProps(): DefaultDataSourceProvider = {
+  def getInstance(): DefaultDataSourceProvider = {
+    getInstance(ConfigFactory.load())
+  }
+
+  def getInstance(config: Config): DefaultDataSourceProvider = {
     new DefaultDataSourceProvider(
-      System.getProperty("db.host", "localhost"),
-      System.getProperty("db.port", "5432").toInt,
-      System.getProperty("db.user").ensuring(Option(_).nonEmpty),
-      System.getProperty("db.password").ensuring(Option(_).nonEmpty),
-      System.getProperty("db.database", "taxo")
+      config.getString("db.host"),
+      config.getInt("db.port"),
+      config.getString("db.user"),
+      config.getString("db.password"),
+      config.getString("db.database")
     )
   }
 }

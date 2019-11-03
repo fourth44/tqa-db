@@ -57,7 +57,7 @@ object DtsInserter {
     val entrypointName = entrypointDocUris.head.toString
     val entrypoint = Entrypoint(entrypointName, entrypointDocUris)
 
-    val ds = DefaultDataSourceProvider.getInstanceFromSysProps().dataSource
+    val ds = DefaultDataSourceProvider.getInstance().dataSource
     val appConf = new DefaultAppConf(ds)
 
     logger.info(s"Storing taxonomy")

@@ -36,7 +36,7 @@ object TaxonomyLoader {
   def loadTaxonomy(entrypointName: String): Unit = {
     logger.info(s"Loading taxonomy from the database for entrypoint $entrypointName")
 
-    val ds = DefaultDataSourceProvider.getInstanceFromSysProps().dataSource
+    val ds = DefaultDataSourceProvider.getInstance().dataSource
     val appConf = new DefaultAppConf(ds)
 
     val dtsRepo: DtsRepo = new DefaultDtsRepo(appConf.transactionManager, new JdbcTemplate(ds))

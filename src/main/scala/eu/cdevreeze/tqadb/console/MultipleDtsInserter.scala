@@ -59,7 +59,7 @@ object MultipleDtsInserter {
 
     logger.info(s"Found ${entrypointDocUris.size} entrypoints")
 
-    val ds = DefaultDataSourceProvider.getInstanceFromSysProps().dataSource
+    val ds = DefaultDataSourceProvider.getInstance().dataSource
     val appConf = new DefaultAppConf(ds)
 
     val dtsRepo: DtsRepo = new DefaultDtsRepo(appConf.transactionManager, new JdbcTemplate(ds))

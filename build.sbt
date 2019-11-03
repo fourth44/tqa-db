@@ -35,6 +35,7 @@ libraryDependencies ++= Seq(
   "org.postgresql" % "postgresql" % "42.2.8",
   "com.zaxxer" % "HikariCP" % "3.4.1",
   "ch.qos.logback" % "logback-classic" % "1.2.3",
+  "com.typesafe" % "config" % "1.4.0",
 
   "org.scalatest" %% "scalatest" % "3.0.8" % "test"
 )
