@@ -33,14 +33,13 @@ import eu.cdevreeze.tqa.docbuilder.DocumentBuilder
 import eu.cdevreeze.tqa.docbuilder.jvm.UriResolvers
 import eu.cdevreeze.tqa.docbuilder.saxon.SaxonDocumentBuilder
 import eu.cdevreeze.tqadb.data.Entrypoint
-import eu.cdevreeze.tqadb.repo.DefaultDtsRepo
 import eu.cdevreeze.tqadb.repo.DtsRepo
 import eu.cdevreeze.tqadb.wiring.DefaultAppConf
 import eu.cdevreeze.tqadb.wiring.DefaultDataSourceProvider
+import eu.cdevreeze.tqadb.wiring.DefaultDbInfraConf
 import net.sf.saxon.s9api.Processor
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
-import org.springframework.jdbc.core.JdbcTemplate
 import org.xml.sax.InputSource
 
 /**
@@ -61,9 +60,8 @@ object MultipleDtsInserter {
 
     val ds = DefaultDataSourceProvider.getInstance().dataSource
     ds.setMaximumPoolSize(5) // scalastyle:off
-    val appConf = new DefaultAppConf(ds)
-
-    val dtsRepo: DtsRepo = new DefaultDtsRepo(appConf.transactionManager, new JdbcTemplate(ds))
+    val appConf = DefaultAppConf.getInstance(new DefaultDbInfraConf(ds))
+    val dtsRepo: DtsRepo = appConf.dtsRepo
 
     entrypointDocUris.toSeq.foreach { entrypointDocUri =>
       logger.info(s"Processing taxonomy. Entrypoint: $entrypointDocUri")

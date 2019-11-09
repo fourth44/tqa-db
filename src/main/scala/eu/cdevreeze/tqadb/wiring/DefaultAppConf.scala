@@ -16,18 +16,59 @@
 
 package eu.cdevreeze.tqadb.wiring
 
-import javax.sql.DataSource
-import org.springframework.jdbc.datasource.DataSourceTransactionManager
-import org.springframework.transaction.PlatformTransactionManager
+import com.typesafe.config.Config
+import com.typesafe.config.ConfigFactory
+import eu.cdevreeze.tqadb.internal.TransactionTemplates
+import eu.cdevreeze.tqadb.internal.TransactionTemplates._
+import eu.cdevreeze.tqadb.repo.DefaultDtsRepo
+import eu.cdevreeze.tqadb.repo.DefaultEntrypointRepo
+import eu.cdevreeze.tqadb.repo.DtsRepo
+import eu.cdevreeze.tqadb.repo.EntrypointRepo
+import org.springframework.jdbc.core.JdbcTemplate
 
 /**
  * Default application configuration without any magic, and fully understood by the Scala compiler.
  *
+ * Note that choosing a transaction timeout for "long transactions" at runtime is possible, and that this would not
+ * be possible when using the Transactional annotation instead of a TransactionTemplate.
+ *
  * @author Chris de Vreeze
  */
-final class DefaultAppConf(val dataSource: DataSource) extends AppConf {
+final class DefaultAppConf(val dbInfraConf: DbInfraConf, val longTransactionTimeoutInSeconds: Int) extends AppConf {
 
-  val transactionManager: PlatformTransactionManager = {
-    new DataSourceTransactionManager(dataSource)
+  def dtsRepo: DtsRepo = {
+    val txManager = dbInfraConf.transactionManager
+
+    val txTemplate = TransactionTemplates(txManager).withIsolationLevel(IsolationSerializable)
+      .withTimeoutInSeconds(longTransactionTimeoutInSeconds)
+
+    val readOnlyTxTemplate = TransactionTemplates(txManager).withReadOnly(true).withIsolationLevel(IsolationSerializable)
+      .withTimeoutInSeconds(longTransactionTimeoutInSeconds)
+
+    new DefaultDtsRepo(new JdbcTemplate(dbInfraConf.dataSource), txTemplate, readOnlyTxTemplate)
+  }
+
+  def entrypointRepo: EntrypointRepo = {
+    val txManager = dbInfraConf.transactionManager
+
+    val txTemplate = TransactionTemplates(txManager).withIsolationLevel(IsolationSerializable)
+
+    val readOnlyTxTemplate = TransactionTemplates(txManager).withReadOnly(true).withIsolationLevel(IsolationSerializable)
+
+    new DefaultEntrypointRepo(new JdbcTemplate(dbInfraConf.dataSource), txTemplate, readOnlyTxTemplate)
+  }
+}
+
+object DefaultAppConf {
+
+  def getInstance(dbInfraConf: DbInfraConf): DefaultAppConf = {
+    getInstance(dbInfraConf, ConfigFactory.load())
+  }
+
+  def getInstance(dbInfraConf: DbInfraConf, config: Config): DefaultAppConf = {
+    val longTransactionTimeoutInSeconds: Int =
+      if (config.hasPath("longTransactionTimeoutInSeconds")) config.getInt("longTransactionTimeoutInSeconds") else 600 // scalastyle:off
+
+    new DefaultAppConf(dbInfraConf, longTransactionTimeoutInSeconds)
   }
 }

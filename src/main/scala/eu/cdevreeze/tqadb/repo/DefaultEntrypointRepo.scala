@@ -30,8 +30,6 @@ import org.springframework.jdbc.core.JdbcOperations
 import org.springframework.jdbc.core.RowMapper
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcOperations
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate
-import org.springframework.transaction.PlatformTransactionManager
-import org.springframework.transaction.TransactionStatus
 import org.springframework.transaction.support.TransactionTemplate
 
 /**
@@ -39,19 +37,25 @@ import org.springframework.transaction.support.TransactionTemplate
  *
  * @author Chris de Vreeze
  */
-final class DefaultEntrypointRepo(val txManager: PlatformTransactionManager, val jdbcTemplate: JdbcOperations) extends EntrypointRepo {
+final class DefaultEntrypointRepo(
+  val jdbcTemplate: JdbcOperations,
+  val transactionTemplate: TransactionTemplate,
+  val readOnlyTransactionTemplate: TransactionTemplate) extends EntrypointRepo {
 
   private val delegateRepo: EntrypointRepo = new NonTransactionalEntrypointRepo(jdbcTemplate)
 
   // TODO Consider using the RetryTemplate for read-write transactions with isolation level serializable
 
   def findAllEntrypoints(): Seq[Entrypoint] = {
-    val txTemplate = new TransactionTemplate(txManager)
-    txTemplate.setReadOnly(true)
+    readOnlyTransactionTemplate.execute { _ => delegateRepo.findAllEntrypoints() }
+  }
 
-    txTemplate.execute { _: TransactionStatus =>
-      delegateRepo.findAllEntrypoints()
-    }
+  def findEntrypointByName(entrypointName: String): Option[Entrypoint] = {
+    readOnlyTransactionTemplate.execute { _ => delegateRepo.findEntrypointByName(entrypointName) }
+  }
+
+  def findEntrypointByDocUris(entrypointDocUris: Set[URI]): Option[Entrypoint] = {
+    readOnlyTransactionTemplate.execute { _ => delegateRepo.findEntrypointByDocUris(entrypointDocUris) }
   }
 }
 
@@ -65,18 +69,33 @@ object DefaultEntrypointRepo {
       namedParameterJdbcTemplate.query(findAllEntrypointDocUrisSql, entrypointDocUriRowMapper)
         .asScala.groupBy(_.name).toSeq.map { case (name, rows) => Entrypoint(name, rows.map(_.docUri).toSet) }
     }
+
+    def findEntrypointByName(entrypointName: String): Option[Entrypoint] = {
+      namedParameterJdbcTemplate
+        .query(findAllEntrypointDocUrisByNameSql, Map("name" -> entrypointName).asJava, entrypointDocUriRowMapper)
+        .asScala.groupBy(_.name).toSeq.map { case (name, rows) => Entrypoint(name, rows.map(_.docUri).toSet) }
+        .headOption
+    }
+
+    def findEntrypointByDocUris(entrypointDocUris: Set[URI]): Option[Entrypoint] = {
+      // Inefficient
+      findAllEntrypoints().find(ep => ep.docUris == entrypointDocUris)
+    }
   }
 
   private case class EntrypointDocUri(name: String, docUri: URI)
 
-  val findAllEntrypointDocUrisSql: String =
+  private val baseEntrypointDocUrisQuery =
     select(field("entrypoints.name"), field("entrypoint_docuris.docuri"))
       .from(table("entrypoints"))
       .join(table("entrypoint_docuris"))
       .on(field("entrypoints.name").eq(field("entrypoint_docuris.entrypoint_name")))
-      .getSQL()
 
-  private val entrypointDocUriRowMapper: RowMapper[EntrypointDocUri] = { (rs: ResultSet, rowNum: Int) =>
+  val findAllEntrypointDocUrisSql: String = baseEntrypointDocUrisQuery.getSQL()
+
+  val findAllEntrypointDocUrisByNameSql: String = baseEntrypointDocUrisQuery.where("entrypoints.name = :name").getSQL()
+
+  private val entrypointDocUriRowMapper: RowMapper[EntrypointDocUri] = { (rs: ResultSet, _: Int) =>
     EntrypointDocUri(
       name = rs.getString("name"),
       docUri = URI.create(rs.getString("docuri"))

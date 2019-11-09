@@ -40,7 +40,7 @@ trait DtsRepo {
   /**
    * Removes a DTS from the database. If the entrypoint does not occur in the database, this is a no-op.
    */
-  def deleteTaxo(entrypoint: Entrypoint): Unit
+  def deleteTaxo(entrypointName: String): Unit
 
   /**
    * Loads the taxonomy with the given entrypoint from the database. The taxonomy is returned as a TQA taxonomy.

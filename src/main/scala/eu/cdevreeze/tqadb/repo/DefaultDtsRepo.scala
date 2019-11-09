@@ -47,9 +47,6 @@ import org.jooq.impl.DSL.select
 import org.jooq.impl.DSL.table
 import org.springframework.jdbc.core.BatchPreparedStatementSetter
 import org.springframework.jdbc.core.JdbcOperations
-import org.springframework.transaction.PlatformTransactionManager
-import org.springframework.transaction.TransactionDefinition
-import org.springframework.transaction.TransactionStatus
 import org.springframework.transaction.support.TransactionTemplate
 
 /**
@@ -57,7 +54,10 @@ import org.springframework.transaction.support.TransactionTemplate
  *
  * @author Chris de Vreeze
  */
-final class DefaultDtsRepo(val txManager: PlatformTransactionManager, val jdbcTemplate: JdbcOperations) extends DtsRepo {
+final class DefaultDtsRepo(
+  val jdbcTemplate: JdbcOperations,
+  val transactionTemplate: TransactionTemplate,
+  val readOnlyTransactionTemplate: TransactionTemplate) extends DtsRepo {
 
   private val delegateRepo: DtsRepo = new NonTransactionalDtsRepo(jdbcTemplate)
 
@@ -68,13 +68,7 @@ final class DefaultDtsRepo(val txManager: PlatformTransactionManager, val jdbcTe
       entrypoint.docUris.subsetOf(taxo.taxonomyBase.taxonomyDocUriMap.keySet),
       s"Not an entrypoint for the given taxonomy: $entrypoint")
 
-    val txTemplate: TransactionTemplate = new TransactionTemplate(txManager)
-    txTemplate.setIsolationLevel(TransactionDefinition.ISOLATION_SERIALIZABLE)
-    txTemplate.setTimeout(600) // scalastyle:off
-
-    txTemplate.executeWithoutResult { _: TransactionStatus =>
-      delegateRepo.insertTaxo(entrypoint, taxo)
-    }
+    transactionTemplate.executeWithoutResult { _ => delegateRepo.insertTaxo(entrypoint, taxo) }
   }
 
   def insertOrUpdateTaxo(entrypoint: Entrypoint, taxo: BasicTaxonomy): Unit = {
@@ -82,32 +76,15 @@ final class DefaultDtsRepo(val txManager: PlatformTransactionManager, val jdbcTe
       entrypoint.docUris.subsetOf(taxo.taxonomyBase.taxonomyDocUriMap.keySet),
       s"Not an entrypoint for the given taxonomy: $entrypoint")
 
-    val txTemplate: TransactionTemplate = new TransactionTemplate(txManager)
-    txTemplate.setIsolationLevel(TransactionDefinition.ISOLATION_SERIALIZABLE)
-    txTemplate.setTimeout(600) // scalastyle:off
-
-    txTemplate.executeWithoutResult { _: TransactionStatus =>
-      delegateRepo.insertOrUpdateTaxo(entrypoint, taxo)
-    }
+    transactionTemplate.executeWithoutResult { _ => delegateRepo.insertOrUpdateTaxo(entrypoint, taxo) }
   }
 
-  def deleteTaxo(entrypoint: Entrypoint): Unit = {
-    val txTemplate: TransactionTemplate = new TransactionTemplate(txManager)
-    txTemplate.setIsolationLevel(TransactionDefinition.ISOLATION_SERIALIZABLE)
-
-    txTemplate.executeWithoutResult { _: TransactionStatus =>
-      delegateRepo.deleteTaxo(entrypoint)
-    }
+  def deleteTaxo(entrypointName: String): Unit = {
+    transactionTemplate.executeWithoutResult { _ => delegateRepo.deleteTaxo(entrypointName) }
   }
 
   def getTaxonomy(entrypointName: String): BasicTaxonomy = {
-    val txTemplate = new TransactionTemplate(txManager)
-    txTemplate.setReadOnly(true)
-    txTemplate.setTimeout(300) // scalastyle:off
-
-    txTemplate.execute { _: TransactionStatus =>
-      delegateRepo.getTaxonomy(entrypointName)
-    }
+    readOnlyTransactionTemplate.execute { _ => delegateRepo.getTaxonomy(entrypointName) }
   }
 }
 
@@ -163,16 +140,16 @@ object DefaultDtsRepo {
         entrypoint.docUris.subsetOf(taxo.taxonomyBase.taxonomyDocUriMap.keySet),
         s"Not an entrypoint for the given taxonomy: $entrypoint")
 
-      deleteTaxo(entrypoint)
+      deleteTaxo(entrypoint.name)
       insertTaxo(entrypoint, taxo)
     }
 
-    def deleteTaxo(entrypoint: Entrypoint): Unit = {
-      jdbcTemplate.update(deleteDtsDocUrisSql, entrypoint.name)
+    def deleteTaxo(entrypointName: String): Unit = {
+      jdbcTemplate.update(deleteDtsDocUrisSql, entrypointName)
 
-      jdbcTemplate.update(deleteEntrypointDocUrisSql, entrypoint.name)
+      jdbcTemplate.update(deleteEntrypointDocUrisSql, entrypointName)
 
-      jdbcTemplate.update(deleteEntrypointSql, entrypoint.name)
+      jdbcTemplate.update(deleteEntrypointSql, entrypointName)
 
       jdbcTemplate.update(deleteDocsForEntrypointSql)
     }
@@ -188,7 +165,7 @@ object DefaultDtsRepo {
     }
 
     private def convertDocToSQLXML(doc: TaxonomyDocument, ps: PreparedStatement): SQLXML = {
-      val sqlXml: SQLXML = ps.getConnection().createSQLXML()
+      val sqlXml: SQLXML = ps.getConnection.createSQLXML()
       val saxResult = sqlXml.setResult(classOf[SAXResult])
       saxResult.setSystemId(doc.uri.toString) // Trying to retain the document URI, but we cannot count on it.
 
@@ -255,7 +232,7 @@ object DefaultDtsRepo {
       .getSQL()
   }
 
-  private def getTaxonomyDocRowMapper(processor: Processor): RowMapper[TaxonomyDocument] = { (rs: ResultSet, rowNum: Int) =>
+  private def getTaxonomyDocRowMapper(processor: Processor): RowMapper[TaxonomyDocument] = { (rs: ResultSet, _: Int) =>
     val docUri: URI = URI.create(rs.getString("docuri"))
     val docSqlXml: SQLXML = rs.getSQLXML("doc")
 

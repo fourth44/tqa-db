@@ -14,22 +14,20 @@
  * limitations under the License.
  */
 
-package eu.cdevreeze.tqadb.repo
+package eu.cdevreeze.tqadb.wiring
 
-import java.net.URI
-
-import eu.cdevreeze.tqadb.data.Entrypoint
+import javax.sql.DataSource
+import org.springframework.jdbc.datasource.DataSourceTransactionManager
+import org.springframework.transaction.PlatformTransactionManager
 
 /**
- * Abstract entrypoint repository API.
+ * Default "database infrastructure" configuration without any magic, and fully understood by the Scala compiler.
  *
  * @author Chris de Vreeze
  */
-trait EntrypointRepo {
+final class DefaultDbInfraConf(val dataSource: DataSource) extends DbInfraConf {
 
-  def findAllEntrypoints(): Seq[Entrypoint]
-
-  def findEntrypointByName(entrypointName: String): Option[Entrypoint]
-
-  def findEntrypointByDocUris(entrypointDocUris: Set[URI]): Option[Entrypoint]
+  val transactionManager: PlatformTransactionManager = {
+    new DataSourceTransactionManager(dataSource)
+  }
 }

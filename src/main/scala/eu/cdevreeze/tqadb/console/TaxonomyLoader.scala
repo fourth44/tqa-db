@@ -16,13 +16,12 @@
 
 package eu.cdevreeze.tqadb.console
 
-import eu.cdevreeze.tqadb.repo.DefaultDtsRepo
 import eu.cdevreeze.tqadb.repo.DtsRepo
 import eu.cdevreeze.tqadb.wiring.DefaultAppConf
 import eu.cdevreeze.tqadb.wiring.DefaultDataSourceProvider
+import eu.cdevreeze.tqadb.wiring.DefaultDbInfraConf
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
-import org.springframework.jdbc.core.JdbcTemplate
 
 /**
  * Program that loads a taxonomy from the database, and shows some statistics.
@@ -37,9 +36,8 @@ object TaxonomyLoader {
     logger.info(s"Loading taxonomy from the database for entrypoint $entrypointName")
 
     val ds = DefaultDataSourceProvider.getInstance().simpleDataSource
-    val appConf = new DefaultAppConf(ds)
-
-    val dtsRepo: DtsRepo = new DefaultDtsRepo(appConf.transactionManager, new JdbcTemplate(ds))
+    val appConf = DefaultAppConf.getInstance(new DefaultDbInfraConf(ds))
+    val dtsRepo: DtsRepo = appConf.dtsRepo
 
     val dts = dtsRepo.getTaxonomy(entrypointName)
 

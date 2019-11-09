@@ -16,19 +16,22 @@
 
 package eu.cdevreeze.tqadb.wiring
 
-import javax.sql.DataSource
-import org.springframework.transaction.PlatformTransactionManager
+import eu.cdevreeze.tqadb.repo.DtsRepo
+import eu.cdevreeze.tqadb.repo.EntrypointRepo
 
 /**
  * Application configuration without any magic, and fully understood by the Scala compiler.
  *
- * It can be used to create JdbcTemplate and TransactionTemplate instances.
+ * It offers the data repositories needed by application code, whether mocked or real ones (using a DataSource and
+ * PlatformTransactionManager).
+ *
+ * Note that indeed the repositories are very easy to mock.
  *
  * @author Chris de Vreeze
  */
 trait AppConf {
 
-  def dataSource: DataSource
+  def dtsRepo: DtsRepo
 
-  def transactionManager: PlatformTransactionManager
+  def entrypointRepo: EntrypointRepo
 }

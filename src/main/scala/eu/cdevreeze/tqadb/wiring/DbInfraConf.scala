@@ -14,22 +14,23 @@
  * limitations under the License.
  */
 
-package eu.cdevreeze.tqadb.repo
+package eu.cdevreeze.tqadb.wiring
 
-import java.net.URI
-
-import eu.cdevreeze.tqadb.data.Entrypoint
+import javax.sql.DataSource
+import org.springframework.transaction.PlatformTransactionManager
 
 /**
- * Abstract entrypoint repository API.
+ * Database "infrastructure" configuration without any magic, and fully understood by the Scala compiler.
+ * This configuration holds a DataSource and PlatformTransactionManager. Both must be created only once, and then
+ * live for the duration of the application.
+ *
+ * It can be used to create JdbcTemplate and TransactionTemplate instances, which may be created as often as desired.
  *
  * @author Chris de Vreeze
  */
-trait EntrypointRepo {
+trait DbInfraConf {
 
-  def findAllEntrypoints(): Seq[Entrypoint]
+  def dataSource: DataSource
 
-  def findEntrypointByName(entrypointName: String): Option[Entrypoint]
-
-  def findEntrypointByDocUris(entrypointDocUris: Set[URI]): Option[Entrypoint]
+  def transactionManager: PlatformTransactionManager
 }
