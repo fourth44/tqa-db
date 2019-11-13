@@ -23,7 +23,7 @@ import eu.cdevreeze.tqadb.data.Entrypoint
  *
  * @author Chris de Vreeze
  */
-trait EntrypointRepo {
+trait EntrypointRepoF[F[_]] {
 
-  def findAllEntrypoints(): Seq[Entrypoint]
+  def findAllEntrypoints(): F[Seq[Entrypoint]]
 }

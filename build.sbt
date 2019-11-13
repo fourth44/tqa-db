@@ -37,7 +37,13 @@ libraryDependencies ++= Seq(
   "ch.qos.logback" % "logback-classic" % "1.2.3",
   "com.typesafe" % "config" % "1.4.0",
 
-  "org.scalatest" %% "scalatest" % "3.0.8" % "test"
+  "org.typelevel" %% "cats-effect"     % "2.0.0",
+  "org.tpolecat" %% "doobie-core"      % "0.8.4",
+  "org.tpolecat" %% "doobie-hikari"    % "0.8.4",          // HikariCP transactor.
+  "org.tpolecat" %% "doobie-postgres"  % "0.8.4",          // Postgres driver 42.2.8 + type mappings.
+  "org.tpolecat" %% "doobie-scalatest" % "0.8.4" % "test",  // ScalaTest support for typechecking statements.
+
+"org.scalatest" %% "scalatest" % "3.0.8" % "test"
 )
 
 lazy val pomData =

@@ -24,27 +24,27 @@ import eu.cdevreeze.tqadb.data.Entrypoint
  *
  * @author Chris de Vreeze
  */
-trait DtsRepo {
+trait DtsRepoF[F[_]] {
 
   /**
    * Inserts a DTS into the database. The given entrypoint must belong to the given taxonomy.
    */
-  def insertTaxo(entrypoint: Entrypoint, taxo: BasicTaxonomy): Unit
+  def insertTaxo(entrypoint: Entrypoint, taxo: BasicTaxonomy): F[Unit]
 
   /**
    * Inserts a DTS into the database, or updates it if it is already in the database. The given entrypoint must belong to the given taxonomy.
    * Updating here means, within the same transaction: first delete, then insert.
    */
-  def insertOrUpdateTaxo(entrypoint: Entrypoint, taxo: BasicTaxonomy): Unit
+  def insertOrUpdateTaxo(entrypoint: Entrypoint, taxo: BasicTaxonomy): F[Unit]
 
   /**
    * Removes a DTS from the database. If the entrypoint does not occur in the database, this is a no-op.
    */
-  def deleteTaxo(entrypoint: Entrypoint): Unit
+  def deleteTaxo(entrypoint: Entrypoint): F[Unit]
 
   /**
    * Loads the taxonomy with the given entrypoint from the database. The taxonomy is returned as a TQA taxonomy.
    * An exception is thrown if the entrypoint does not occur in the database.
    */
-  def getTaxonomy(entrypointName: String): BasicTaxonomy
+  def getTaxonomy(entrypointName: String): F[BasicTaxonomy]
 }
