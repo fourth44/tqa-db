@@ -23,6 +23,7 @@ import eu.cdevreeze.yaidom.saxon.SaxonDocument
 import javax.xml.transform.sax.SAXSource
 import net.sf.saxon.s9api.Processor
 import doobie.enum.JdbcType.Other
+import doobie.util.log.LogHandler
 import javax.xml.transform.sax.SAXResult
 import net.sf.saxon.query.QueryResult
 import net.sf.saxon.serialize.SerializationProperties
@@ -66,10 +67,10 @@ class DoobieDtsRepo extends DtsRepoF[ConnectionIO] {
    */
   override def deleteTaxo(entrypoint: Entrypoint): doobie.ConnectionIO[Unit] = {
     for {
-      _ <- sql"${DefaultDtsRepo.deleteDtsDocUrisSql}".update.run
-      _ <- sql"${DefaultDtsRepo.deleteEntrypointDocUrisSql}".update.run
-      _ <- sql"${DefaultDtsRepo.deleteEntrypointSql}".update.run
-      _ <- sql"${DefaultDtsRepo.deleteDocsForEntrypointSql}".update.run
+      _ <- deleteDtsDocUrisSql(entrypoint.name).run
+      _ <- deleteEntrypointDocUrisSql(entrypoint.name).run
+      _ <- deleteEntrypointSql(entrypoint.name).run
+      _ <- deleteDocsForEntrypointSql.run
     } yield ()
   }
 
@@ -89,6 +90,8 @@ class DoobieDtsRepo extends DtsRepoF[ConnectionIO] {
 }
 
 object DoobieDtsRepo {
+
+  implicit val han: LogHandler = LogHandler.jdkLogHandler // not for production use
 
   // convenience repo with transactions
   final class TxDtsRepo(transactor: Transactor[IO]) extends DtsRepoF[IO] {
@@ -125,7 +128,22 @@ object DoobieDtsRepo {
             where entrypoints.name = ${entrypointName}
             """.query[TaxonomyDocument]
 
-  val saxonPut: Put[TaxonomyDocument] = Put.Advanced.one(Other, NonEmptyList.of("xml"),
+
+  def deleteDtsDocUrisSql(entrypointName: String) =
+    sql"DELETE FROM dts_docuris WHERE entrypoint_name = ${entrypointName}".update
+
+  def deleteEntrypointDocUrisSql(entrypointName: String) =
+    sql"DELETE FROM entrypoint_docuris WHERE entrypoint_name = ${entrypointName}".update
+
+  def deleteEntrypointSql(entrypointName: String) =
+    sql"DELETE FROM entrypoints WHERE name = ${entrypointName}".update
+
+  val deleteDocsForEntrypointSql =
+    sql"DELETE FROM taxo_documents AS td WHERE NOT EXISTS (SELECT * FROM dts_docuris AS dd WHERE td.docuri = dd.docuri)".update
+
+  ///////////////////////////
+
+  def saxonPut: Put[TaxonomyDocument] = Put.Advanced.one(Other, NonEmptyList.of("xml"),
     put = { case (ps, n, td) =>
       val sqlXml = convertDocToSQLXML(td, ps)
       ps.setObject(n, sqlXml)

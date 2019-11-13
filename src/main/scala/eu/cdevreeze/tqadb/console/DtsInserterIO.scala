@@ -32,7 +32,7 @@ object DtsInserterIO extends IOApp {
 
   // We need a ContextShift[IO] before we can construct a Transactor[IO]. The passed ExecutionContext
   // is where nonblocking operations will be executed. For testing here we're using a synchronous EC.
-  implicit val cs = IO.contextShift(ExecutionContexts.synchronous)
+  // implicit val cs = IO.contextShift(ExecutionContexts.synchronous)
 
   val ds = DefaultDataSourceProvider.getInstance().simpleDataSource
 
@@ -50,14 +50,10 @@ object DtsInserterIO extends IOApp {
         }).as(ExitCode.Success)
       case _ => IO(System.err.println("Usage: DtsInserter <root dir> <entrypoint doc URI> ...")).as(ExitCode(2))
     }
-
-    val rootDir = new File(args(0)).ensuring(_.isDirectory)
-
-    insertOrUpdateDts(rootDir, args.drop(1).map(u => URI.create(u)).toSet)
   }
 
 
-  def transactor(ds: DataSource)(implicit ev: ContextShift[IO]): Resource[IO, Transactor.Aux[IO, DataSource]] =
+  def transactor(ds: DataSource): Resource[IO, Transactor.Aux[IO, DataSource]] =
     for {
       ce <- ExecutionContexts.fixedThreadPool[IO](32) // our connect EC
       be <- Blocker[IO]    // our blocking EC
@@ -65,18 +61,17 @@ object DtsInserterIO extends IOApp {
 
 
   def insertOrUpdateDts(taxoRootDir: File, entrypointDocUris: Set[URI], dtsRepo: DtsRepoF[IO]): IO[Unit] = {
-    logger.info(s"Loading taxonomy")
-    val dts: BasicTaxonomy = getTaxonomy(taxoRootDir, entrypointDocUris)
-
-    val entrypointName = entrypointDocUris.head.toString
-    val entrypoint = Entrypoint(entrypointName, entrypointDocUris)
-
-    logger.info(s"Storing taxonomy")
-
-    // TODO IO wrapper around stuff above
-
-    dtsRepo.insertOrUpdateTaxo(entrypoint, dts) <* IO(logger.info(s"Stored taxonomy"))
-
+    for {
+      _               <- IO(logger.info(s"Loading taxonomy"))
+      dts             <- IO(getTaxonomy(taxoRootDir, entrypointDocUris))
+      entrypointName  <- IO(entrypointDocUris.head.toString)
+      entrypoint      <- IO(Entrypoint(entrypointName, entrypointDocUris))
+      _               <- IO(logger.info(s"Storing taxonomy"))
+      _               <- dtsRepo.insertOrUpdateTaxo(entrypoint, dts)
+      _               <- IO(logger.info(s"Stored taxonomy"))
+    } yield {
+      ()
+    }
   }
 
   private def getTaxonomy(taxoRootDir: File, entrypointDocUris: Set[URI]): BasicTaxonomy = {

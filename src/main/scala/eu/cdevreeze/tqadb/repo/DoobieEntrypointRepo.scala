@@ -8,6 +8,7 @@ import doobie.util.transactor.Transactor
 import eu.cdevreeze.tqadb.data.Entrypoint
 import doobie.implicits._
 import doobie.hi._
+import doobie.util.log.LogHandler
 
 class DoobieEntrypointRepo extends EntrypointRepoF[ConnectionIO] {
 
@@ -21,6 +22,8 @@ class DoobieEntrypointRepo extends EntrypointRepoF[ConnectionIO] {
 }
 
 object DoobieEntrypointRepo {
+
+  implicit val han: LogHandler = LogHandler.jdkLogHandler // not for production use
 
   case class EntrypointDocUri(name: String, docUri: URI)
 
