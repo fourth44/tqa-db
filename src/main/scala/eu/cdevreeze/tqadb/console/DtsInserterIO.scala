@@ -6,7 +6,9 @@ import java.net.URI
 import cats.effect._
 import cats.syntax.all._
 import doobie.util.ExecutionContexts
+import doobie.util.transactor.Strategy
 import doobie.util.transactor.Transactor
+import doobie._
 import eu.cdevreeze.tqa.base.relationship.DefaultRelationshipFactory
 import eu.cdevreeze.tqa.base.relationship.RelationshipFactory
 import eu.cdevreeze.tqa.base.taxonomy.BasicTaxonomy
@@ -30,10 +32,6 @@ object DtsInserterIO extends IOApp {
 
   private val logger: Logger = LoggerFactory.getLogger("DtsInserter")
 
-  // We need a ContextShift[IO] before we can construct a Transactor[IO]. The passed ExecutionContext
-  // is where nonblocking operations will be executed. For testing here we're using a synchronous EC.
-  // implicit val cs = IO.contextShift(ExecutionContexts.synchronous)
-
   val ds = DefaultDataSourceProvider.getInstance().simpleDataSource
 
   def run(args: List[String]): IO[ExitCode] = {
@@ -53,11 +51,17 @@ object DtsInserterIO extends IOApp {
   }
 
 
-  def transactor(ds: DataSource): Resource[IO, Transactor.Aux[IO, DataSource]] =
+  def transactor(ds: DataSource): Resource[IO, Transactor[IO]] =
     for {
       ce <- ExecutionContexts.fixedThreadPool[IO](32) // our connect EC
       be <- Blocker[IO]    // our blocking EC
-    } yield Transactor.fromDataSource[IO](ds, ce, be)
+    } yield {
+      val xa = Transactor.fromDataSource[IO](ds, ce, be)
+      Transactor.strategy.set(xa, Strategy.default.copy(
+        after = Strategy.default.after <* FC.delay(logger.info("after commit")),
+        before = Strategy.default.before *> FC.delay(logger.info("begin transaction"))
+      ))
+    }
 
 
   def insertOrUpdateDts(taxoRootDir: File, entrypointDocUris: Set[URI], dtsRepo: DtsRepoF[IO]): IO[Unit] = {

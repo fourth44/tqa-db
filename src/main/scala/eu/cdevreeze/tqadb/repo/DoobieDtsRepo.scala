@@ -111,9 +111,9 @@ object DoobieDtsRepo {
 
   }
 
-  val insertTaxoDocumentsSql = Update[TaxonomyDocument]("INSERT INTO taxo_documents (docuri, doc) VALUES (?, ?) ON CONFLICT (docuri) DO NOTHING")
+  val insertTaxoDocumentsSql = Update[TaxonomyDocument]("INSERT INTO taxo_documents (docuri, doc) VALUES (?, ?) ON CONFLICT (docuri) DO NOTHING", None, han)
 
-  val insertDtsDocUrisSql = Update[(String, URI)]("INSERT INTO dts_docuris (entrypoint_name, docuri) VALUES (?, ?)")
+  val insertDtsDocUrisSql = Update[(String, URI)]("INSERT INTO dts_docuris (entrypoint_name, docuri) VALUES (?, ?)", None, han)
 
   def insertEntrypointSql(entrypointName: String) = sql"INSERT INTO entrypoints (name) VALUES (${entrypointName})".update
 
